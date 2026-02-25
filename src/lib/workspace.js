@@ -39,6 +39,8 @@ function findMarkerFiles(dir) {
   }
   for (const entry of entries) {
     if (entry.name === 'node_modules' || entry.name === '.git') continue;
+    // Skip .claude/worktrees/ — temporary agent isolation, not canonical locations
+    if (entry.name === 'worktrees' && dir.endsWith('.claude')) continue;
     const fullPath = join(dir, entry.name);
     if (entry.isDirectory()) {
       results.push(...findMarkerFiles(fullPath));
@@ -97,4 +99,53 @@ export function discoverWorkspaces(cwd = process.cwd()) {
 export function findWorkspacesByWorkbench(workbenchName, cwd = process.cwd()) {
   const all = discoverWorkspaces(cwd);
   return all.filter((ws) => ws.workbench === workbenchName);
+}
+
+/**
+ * Find directories under workspace/active/ that lack a .workbench marker.
+ * These are invisible to workspace discovery and should be flagged.
+ * Only checks immediate children of workspace/active/ subdirectories.
+ */
+export function findUnmarkedWorkspaces(cwd = process.cwd()) {
+  const repoRoot = findRepoRoot(cwd);
+  const activeDir = join(repoRoot, 'workspace', 'active');
+
+  if (!existsSync(activeDir)) return [];
+
+  const markedPaths = new Set(
+    discoverWorkspaces(cwd).map((ws) => ws.path)
+  );
+
+  const unmarked = [];
+
+  // Scan leaf directories under workspace/active/ (two levels: category/name)
+  let categories;
+  try {
+    categories = readdirSync(activeDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+
+  for (const cat of categories) {
+    if (!cat.isDirectory() || cat.name.startsWith('.')) continue;
+    const catDir = join(activeDir, cat.name);
+    let entries;
+    try {
+      entries = readdirSync(catDir, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+      const dirPath = relative(repoRoot, join(catDir, entry.name));
+      if (!markedPaths.has(dirPath)) {
+        unmarked.push({
+          name: `${cat.name}/${entry.name}`,
+          path: dirPath,
+        });
+      }
+    }
+  }
+
+  return unmarked;
 }

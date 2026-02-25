@@ -33,19 +33,20 @@ describe('US-1: workspace list', () => {
     assert.ok(result.stdout.includes('website-planning'));
   });
 
-  it('--json returns structured array with all workspaces', () => {
+  it('--json returns structured object with workspaces and warnings', () => {
     const result = runCLIJson(['workspace', 'list'], { cwd: repo.root });
     assert.equal(result.exitCode, 0);
-    assert.ok(Array.isArray(result.json));
-    assert.equal(result.json.length, 3);
+    assert.ok(Array.isArray(result.json.workspaces));
+    assert.equal(result.json.workspaces.length, 3);
+    assert.ok(Array.isArray(result.json.warnings));
 
-    const names = result.json.map((ws) => ws.workbench).sort();
+    const names = result.json.workspaces.map((ws) => ws.workbench).sort();
     assert.deepEqual(names, ['agonda-architect', 'agonda-architect', 'website-planning']);
   });
 
   it('--json includes all expected fields', () => {
     const result = runCLIJson(['workspace', 'list'], { cwd: repo.root });
-    const ws = result.json[0];
+    const ws = result.json.workspaces[0];
     assert.ok('name' in ws);
     assert.ok('path' in ws);
     assert.ok('workbench' in ws);

@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { listPlugins, setPluginState, switchPlugin } from '../lib/plugin.js';
+import { listPlugins, setPluginState, switchPlugin, clearPluginCache } from '../lib/plugin.js';
 import { validateAll } from '../lib/validate.js';
 import { output } from '../utils/output.js';
 import { EXIT_CODES } from '../utils/errors.js';
@@ -23,21 +23,23 @@ export function pluginCommand() {
           version: p.version,
           description: p.description,
           path: p.path,
+          source: p.source,
         })));
         return;
       }
 
       if (plugins.length === 0) {
-        output.write('No plugins found in marketplace.json.');
+        output.write('No plugins found.');
         return;
       }
 
       output.table(
-        ['Name', 'Status', 'Scope', 'Version'],
+        ['Name', 'Status', 'Scope', 'Source', 'Version'],
         plugins.map((p) => [
           p.name,
           p.status === 'enabled' ? 'enabled' : 'disabled',
           p.scope,
+          p.source,
           p.version,
         ])
       );
@@ -87,12 +89,19 @@ export function pluginCommand() {
     .command('enable <name>')
     .description('Enable a plugin')
     .option('--scope <scope>', 'Settings scope: project, local, or user', 'project')
+    .option('--no-cache-clear', 'Skip clearing the plugin cache')
     .action((name, opts, command) => {
       const globalOpts = command.optsWithGlobals();
       const result = setPluginState(name, true, { scope: opts.scope });
 
+      // Clear cache unless --no-cache-clear
+      let cacheResult = null;
+      if (opts.cacheClear !== false) {
+        cacheResult = clearPluginCache([name]);
+      }
+
       if (globalOpts.json) {
-        output.json(result);
+        output.json({ ...result, cache: cacheResult });
         return;
       }
 
@@ -101,6 +110,9 @@ export function pluginCommand() {
       } else {
         output.write(`Enabled ${result.key} in ${result.scope} scope.`);
       }
+      if (cacheResult && cacheResult.cleared.length > 0) {
+        output.write(`Cleared cache for: ${cacheResult.cleared.join(', ')}`);
+      }
       output.status('Restart Claude Code for changes to take effect.');
     });
 
@@ -108,12 +120,19 @@ export function pluginCommand() {
     .command('disable <name>')
     .description('Disable a plugin')
     .option('--scope <scope>', 'Settings scope: project, local, or user', 'project')
+    .option('--no-cache-clear', 'Skip clearing the plugin cache')
     .action((name, opts, command) => {
       const globalOpts = command.optsWithGlobals();
       const result = setPluginState(name, false, { scope: opts.scope });
 
+      // Clear cache unless --no-cache-clear
+      let cacheResult = null;
+      if (opts.cacheClear !== false) {
+        cacheResult = clearPluginCache([name]);
+      }
+
       if (globalOpts.json) {
-        output.json(result);
+        output.json({ ...result, cache: cacheResult });
         return;
       }
 
@@ -121,6 +140,9 @@ export function pluginCommand() {
         output.write(`${result.key} is already disabled (${result.scope} scope).`);
       } else {
         output.write(`Disabled ${result.key} in ${result.scope} scope.`);
+      }
+      if (cacheResult && cacheResult.cleared.length > 0) {
+        output.write(`Cleared cache for: ${cacheResult.cleared.join(', ')}`);
       }
       output.status('Restart Claude Code for changes to take effect.');
     });
@@ -130,6 +152,7 @@ export function pluginCommand() {
     .description('Disable all plugins, enable target. Use --keep to preserve specific plugins.')
     .option('--keep <names...>', 'Plugins to keep enabled during switch')
     .option('--scope <scope>', 'Settings scope: project, local, or user', 'project')
+    .option('--no-cache-clear', 'Skip clearing the plugin cache')
     .action((name, opts, command) => {
       const globalOpts = command.optsWithGlobals();
       const keep = opts.keep || [];
@@ -147,6 +170,7 @@ export function pluginCommand() {
               .filter((p) => p.status === 'enabled' && p.name !== name && !keepSet.has(p.name))
               .map((p) => p.name),
             wouldKeep: keep,
+            wouldClearCache: opts.cacheClear !== false,
           });
           return;
         }
@@ -161,19 +185,31 @@ export function pluginCommand() {
         for (const k of keep) {
           output.write(`  Keep: ${k}`);
         }
+        if (opts.cacheClear !== false) {
+          output.write('  Would clear plugin cache');
+        }
         return;
       }
 
       const result = switchPlugin(name, { keep, scope: opts.scope });
 
+      // Clear cache for the enabled plugin unless --no-cache-clear
+      let cacheResult = null;
+      if (opts.cacheClear !== false) {
+        cacheResult = clearPluginCache([name]);
+      }
+
       if (globalOpts.json) {
-        output.json(result);
+        output.json({ ...result, cache: cacheResult });
         return;
       }
 
       for (const d of result.disabled) output.write(`Disabled: ${d}`);
       for (const e of result.enabled) output.write(`Enabled: ${e}`);
       for (const k of result.kept) output.write(`Kept: ${k}`);
+      if (cacheResult && cacheResult.cleared.length > 0) {
+        output.write(`Cleared cache for: ${cacheResult.cleared.join(', ')}`);
+      }
       output.status('Restart Claude Code for changes to take effect.');
     });
 

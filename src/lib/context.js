@@ -75,6 +75,8 @@ function findWorkbenchFiles(dir) {
   }
   for (const entry of entries) {
     if (entry.name === 'node_modules' || entry.name === '.git') continue;
+    // Skip .claude/worktrees/ — temporary agent isolation, not canonical workbench locations
+    if (entry.name === 'worktrees' && dir.endsWith('.claude')) continue;
     const fullPath = join(dir, entry.name);
     if (entry.isDirectory()) {
       results.push(...findWorkbenchFiles(fullPath));

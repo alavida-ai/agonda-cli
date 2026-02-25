@@ -7,6 +7,7 @@ import { pluginCommand } from './commands/plugin.js';
 import { primitivesCommand } from './commands/primitives.js';
 import { healthCommand } from './commands/health.js';
 import { publishCommand } from './commands/publish.js';
+import { statusCommand } from './commands/status.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../package.json');
@@ -36,6 +37,8 @@ export function createProgram() {
   program.addCommand(healthCommand());
 
   program.addCommand(publishCommand());
+
+  program.addCommand(statusCommand());
 
   // Custom help: show examples-first format
   program.addHelpText('after', `

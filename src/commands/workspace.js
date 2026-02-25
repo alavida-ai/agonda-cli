@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { discoverWorkspaces, findWorkspacesByWorkbench } from '../lib/workspace.js';
+import { discoverWorkspaces, findWorkspacesByWorkbench, findUnmarkedWorkspaces } from '../lib/workspace.js';
 import { output } from '../utils/output.js';
 
 export function workspaceCommand() {
@@ -12,27 +12,42 @@ export function workspaceCommand() {
     .action((opts, command) => {
       const globalOpts = command.optsWithGlobals();
       const workspaces = discoverWorkspaces();
+      const unmarked = findUnmarkedWorkspaces();
 
       if (globalOpts.json) {
-        output.json(workspaces.map((ws) => ({
-          name: ws.name,
-          path: ws.path,
-          workbench: ws.workbench,
-          domain: ws.domain,
-          created: ws.created,
-        })));
+        output.json({
+          workspaces: workspaces.map((ws) => ({
+            name: ws.name,
+            path: ws.path,
+            workbench: ws.workbench,
+            domain: ws.domain,
+            created: ws.created,
+          })),
+          warnings: unmarked.map((u) => ({
+            path: u.path,
+            message: `Missing .workbench marker — invisible to CLI`,
+          })),
+        });
         return;
       }
 
       if (workspaces.length === 0) {
         output.write('No active workspaces found.');
-        return;
+      } else {
+        output.table(
+          ['Workspace', 'Workbench', 'Domain', 'Created'],
+          workspaces.map((ws) => [ws.name, ws.workbench, ws.domain, ws.created])
+        );
       }
 
-      output.table(
-        ['Workspace', 'Workbench', 'Domain', 'Created'],
-        workspaces.map((ws) => [ws.name, ws.workbench, ws.domain, ws.created])
-      );
+      if (unmarked.length > 0) {
+        output.write('');
+        output.status(`${unmarked.length} workspace(s) without .workbench marker:`);
+        for (const u of unmarked) {
+          output.status(`  ${u.path}`);
+        }
+        output.status('Add a .workbench marker to make them discoverable.');
+      }
     });
 
   cmd
@@ -68,7 +83,12 @@ export function workspaceCommand() {
       }
 
       if (matches.length === 0) {
-        output.write(`No workspace found for workbench "${workbenchName}".`);
+        if (globalOpts.json) {
+          output.json({ workspaces: [], workbench: workbenchName, suggestion: 'Create a workspace with a .workbench marker' });
+        } else {
+          output.write(`No workspace found for workbench "${workbenchName}".`);
+          output.status('Tip: Create a workspace directory under workspace/active/ with a .workbench marker.');
+        }
         return;
       }
 

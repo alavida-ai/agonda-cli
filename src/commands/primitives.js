@@ -1,8 +1,28 @@
 import { Command } from 'commander';
-import { checkAllPrimitives, installPrimitives, updatePrimitive } from '../lib/primitives.js';
-import { findWorkbenchContext, findAllWorkbenches } from '../lib/context.js';
+import { checkAllPrimitives, checkWorkbenchPrimitives, installPrimitives, updatePrimitive } from '../lib/primitives.js';
+import { findWorkbenchContext, findAllWorkbenches, resolveWorkbenchFlag } from '../lib/context.js';
 import { output } from '../utils/output.js';
 import { EXIT_CODES } from '../utils/errors.js';
+
+/**
+ * Resolve workbenches based on global flags: --workbench, --all, or auto-detect from cwd.
+ */
+function resolveWorkbenches(globalOpts) {
+  if (globalOpts.workbench) {
+    const wb = resolveWorkbenchFlag(globalOpts.workbench);
+    const name = wb.relativePath.split('/').pop();
+    return [{ name, relativePath: wb.relativePath, path: wb.path, config: wb.config }];
+  }
+  if (globalOpts.all) {
+    return findAllWorkbenches();
+  }
+  const ctx = findWorkbenchContext();
+  if (ctx) {
+    const name = ctx.relativePath.split('/').pop();
+    return [{ name, relativePath: ctx.relativePath, path: ctx.path, config: ctx.config }];
+  }
+  return findAllWorkbenches();
+}
 
 export function primitivesCommand() {
   const cmd = new Command('primitives')
@@ -13,7 +33,21 @@ export function primitivesCommand() {
     .description('Compare pinned versions against latest in registry')
     .action((opts, command) => {
       const globalOpts = command.optsWithGlobals();
-      const { results, summary } = checkAllPrimitives({ all: !!globalOpts.all });
+      const workbenches = resolveWorkbenches(globalOpts);
+      const withPrimitives = workbenches.filter(
+        (wb) => wb.config.primitives && Object.keys(wb.config.primitives).length > 0
+      );
+      const results = withPrimitives.map((wb) => checkWorkbenchPrimitives(wb));
+      let total = 0, current = 0, behind = 0, unknown = 0;
+      for (const r of results) {
+        for (const p of r.primitives) {
+          total++;
+          if (p.status === 'CURRENT') current++;
+          else if (p.status === 'BEHIND') behind++;
+          else unknown++;
+        }
+      }
+      const summary = { total, current, behind, unknown };
 
       if (globalOpts.json) {
         output.json({ results, summary });
@@ -51,18 +85,7 @@ export function primitivesCommand() {
       const update = !!opts.update;
       const dryRun = !!globalOpts.dryRun;
 
-      let workbenches;
-      if (globalOpts.all) {
-        workbenches = findAllWorkbenches();
-      } else {
-        const ctx = findWorkbenchContext();
-        if (ctx) {
-          const name = ctx.relativePath.split('/').pop();
-          workbenches = [{ name, relativePath: ctx.relativePath, path: ctx.path, config: ctx.config }];
-        } else {
-          workbenches = findAllWorkbenches();
-        }
-      }
+      const workbenches = resolveWorkbenches(globalOpts);
 
       const allResults = [];
       for (const wb of workbenches) {
@@ -106,18 +129,7 @@ export function primitivesCommand() {
       const globalOpts = command.optsWithGlobals();
       const dryRun = !!globalOpts.dryRun;
 
-      let workbenches;
-      if (globalOpts.all) {
-        workbenches = findAllWorkbenches();
-      } else {
-        const ctx = findWorkbenchContext();
-        if (ctx) {
-          const wbName = ctx.relativePath.split('/').pop();
-          workbenches = [{ name: wbName, relativePath: ctx.relativePath, path: ctx.path, config: ctx.config }];
-        } else {
-          workbenches = findAllWorkbenches();
-        }
-      }
+      const workbenches = resolveWorkbenches(globalOpts);
 
       const result = updatePrimitive(name, workbenches, { dryRun });
 

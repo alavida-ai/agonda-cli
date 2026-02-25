@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { findRepoRoot } from './context.js';
 import { NotFoundError } from '../utils/errors.js';
@@ -93,15 +93,20 @@ export function getEnabledPluginsWithScope(cwd = process.cwd()) {
 
 /**
  * List all plugins with their enabled/disabled status.
- * Returns array of { name, status, scope, version, description, path, category, tags }.
+ * Returns array of { name, status, scope, version, description, path, category, tags, source }.
+ * Includes both marketplace plugins and external (user/local-scoped) plugins.
  */
 export function listPlugins(cwd = process.cwd()) {
   const marketplace = getMarketplace(cwd);
   const marketplaceName = marketplace.name || 'unknown';
   const enabledMap = getEnabledPluginsWithScope(cwd);
 
-  return (marketplace.plugins || []).map((plugin) => {
+  // Track which enabled keys are accounted for by the marketplace
+  const accountedKeys = new Set();
+
+  const marketplacePlugins = (marketplace.plugins || []).map((plugin) => {
     const key = `${plugin.name}@${marketplaceName}`;
+    accountedKeys.add(key);
     const isEnabled = enabledMap.has(key);
     const scope = isEnabled ? enabledMap.get(key) : null;
 
@@ -114,8 +119,32 @@ export function listPlugins(cwd = process.cwd()) {
       path: plugin.source || '',
       category: plugin.category || '',
       tags: plugin.tags || [],
+      source: 'marketplace',
     };
   });
+
+  // Find enabled plugins NOT in the marketplace (external/user-scoped)
+  const externalPlugins = [];
+  for (const [key, scope] of enabledMap) {
+    if (accountedKeys.has(key)) continue;
+    // Parse the key — format is "name@marketplace" or just a path
+    const atIdx = key.lastIndexOf('@');
+    const name = atIdx > 0 ? key.slice(0, atIdx) : key;
+
+    externalPlugins.push({
+      name,
+      status: 'enabled',
+      scope,
+      version: '-',
+      description: '',
+      path: '',
+      category: '',
+      tags: [],
+      source: 'external',
+    });
+  }
+
+  return [...marketplacePlugins, ...externalPlugins];
 }
 
 /**
@@ -251,4 +280,39 @@ export function switchPlugin(targetName, { keep = [], scope = 'project', cwd = p
   writeSettings(filePath, settings);
 
   return { enabled, disabled, kept, scope, file: filePath };
+}
+
+/**
+ * Clear Claude Code's plugin cache for specific plugins.
+ *
+ * Only clears the cache directory at ~/.claude/plugins/cache/{marketplace}/{plugin-name}/.
+ * Does NOT modify installed_plugins.json — that registry tracks per-project associations
+ * (including worktree paths) and modifying it can break cross-worktree plugin resolution.
+ *
+ * Claude Code will re-install from the marketplace source on next session start when
+ * it finds the cache directory missing but the plugin still registered.
+ *
+ * Returns { cleared: string[], errors: string[] }.
+ */
+export function clearPluginCache(pluginNames, { cwd = process.cwd() } = {}) {
+  const homeDir = process.env.HOME || process.env.USERPROFILE || '';
+  const marketplaceName = getMarketplaceName(cwd);
+  const cacheBase = join(homeDir, '.claude', 'plugins', 'cache', marketplaceName);
+
+  const cleared = [];
+  const errors = [];
+
+  for (const name of pluginNames) {
+    const pluginCacheDir = join(cacheBase, name);
+    if (existsSync(pluginCacheDir)) {
+      try {
+        rmSync(pluginCacheDir, { recursive: true, force: true });
+        cleared.push(name);
+      } catch (err) {
+        errors.push(`${name}: ${err.message}`);
+      }
+    }
+  }
+
+  return { cleared, errors };
 }

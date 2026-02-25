@@ -20,13 +20,13 @@ export function publishCommand() {
     .description('Publish a skill to the registry via PR')
     .argument('<skill-path>', 'Path to the skill directory to publish')
     .option('--confirm', 'Skip interactive confirmation')
-    .option('--version <version>', 'Override version (instead of reading from SKILL.md)')
+    .option('--skill-version <version>', 'Override version (instead of reading from SKILL.md)')
     .action(async (skillPath, opts, command) => {
       const globalOpts = command.optsWithGlobals();
 
       try {
         // 1. Validate skill
-        const skill = validateSkillForPublish(skillPath, { version: opts.version });
+        const skill = validateSkillForPublish(skillPath, { version: opts.skillVersion });
 
         // 2. Check gh auth
         checkGhAuth();

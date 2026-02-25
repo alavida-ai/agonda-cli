@@ -89,8 +89,8 @@ export function validateSkillForPublish(skillPath, { version: overrideVersion } 
   const version = overrideVersion || meta.version;
   if (!version) {
     throw new ValidationError(
-      `No version found in SKILL.md frontmatter and no --version flag provided`,
-      { code: 'no_version', suggestion: 'Add a "version" field to SKILL.md frontmatter or use --version' }
+      `No version found in SKILL.md frontmatter and no --skill-version flag provided`,
+      { code: 'no_version', suggestion: 'Add a "version" field to SKILL.md frontmatter or use --skill-version' }
     );
   }
 
