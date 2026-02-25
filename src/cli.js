@@ -4,6 +4,8 @@ import { formatError, AgondaError, EXIT_CODES } from './utils/errors.js';
 import { output } from './utils/output.js';
 import { workspaceCommand } from './commands/workspace.js';
 import { pluginCommand } from './commands/plugin.js';
+import { primitivesCommand } from './commands/primitives.js';
+import { healthCommand } from './commands/health.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../package.json');
@@ -28,23 +30,9 @@ export function createProgram() {
 
   program.addCommand(pluginCommand());
 
-  program
-    .command('primitives')
-    .description('Manage skill primitives')
-    .addHelpText('after', `
-Examples:
-  agonda primitives status             Check pinned vs latest versions
-  agonda primitives install            Install primitives from workbench.json
-  agonda primitives update <name>      Update a primitive to latest`);
+  program.addCommand(primitivesCommand());
 
-  program
-    .command('health')
-    .description('Run system health checks')
-    .addHelpText('after', `
-Examples:
-  agonda health run                    Scan all domains for compliance
-  agonda health run --json             Machine-readable results
-  agonda health run --deep             Include LLM-assisted checks`);
+  program.addCommand(healthCommand());
 
   program
     .command('publish')
