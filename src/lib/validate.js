@@ -3,6 +3,27 @@ import { join, relative, resolve } from 'node:path';
 import { findRepoRoot, findWorkbenchContext, findAllWorkbenches } from './context.js';
 
 /**
+ * Validate individual mcpServer entries.
+ * Each entry must have either command+args (stdio) or url (HTTP).
+ */
+function validateMcpServerEntries(servers, contextPath, errors) {
+  for (const [name, config] of Object.entries(servers)) {
+    if (!config || typeof config !== 'object' || Array.isArray(config)) {
+      errors.push(`${contextPath}: mcpServer "${name}" must be an object`);
+      continue;
+    }
+    const hasCommand = 'command' in config;
+    const hasUrl = 'url' in config;
+    if (!hasCommand && !hasUrl) {
+      errors.push(`${contextPath}: mcpServer "${name}" must have either "command"+"args" (stdio) or "url" (HTTP)`);
+    }
+    if (hasCommand && hasUrl) {
+      errors.push(`${contextPath}: mcpServer "${name}" has both "command" and "url" — use one format, not both`);
+    }
+  }
+}
+
+/**
  * Validate a single workbench/plugin directory.
  * Returns { path, errors[], warnings[] }.
  */
@@ -23,6 +44,33 @@ export function validateWorkbench(wbPath, repoRoot) {
       const hooksJsonPath = join(wbPath, 'hooks', 'hooks.json');
       if (existsSync(hooksJsonPath) && pluginJson.hooks && pluginJson.hooks.length > 0) {
         warnings.push(`${relPath}: hooks declared in both plugin.json and hooks/hooks.json — hooks.json takes precedence, plugin.json hooks may be duplicates`);
+      }
+
+      // 7. Validate mcpServers format
+      if (pluginJson.mcpServers !== undefined) {
+        const pluginDir = join(wbPath, '.claude-plugin');
+        if (typeof pluginJson.mcpServers === 'string') {
+          // String path — resolve relative to .claude-plugin dir and check file exists
+          const mcpPath = resolve(pluginDir, pluginJson.mcpServers);
+          if (!existsSync(mcpPath)) {
+            errors.push(`${relPath}: mcpServers references non-existent file: ${pluginJson.mcpServers}`);
+          } else {
+            try {
+              const mcpJson = JSON.parse(readFileSync(mcpPath, 'utf-8'));
+              if (!mcpJson.mcpServers || typeof mcpJson.mcpServers !== 'object' || Array.isArray(mcpJson.mcpServers)) {
+                errors.push(`${relPath}: ${pluginJson.mcpServers} must contain an "mcpServers" object`);
+              } else {
+                validateMcpServerEntries(mcpJson.mcpServers, `${relPath}/${pluginJson.mcpServers}`, errors);
+              }
+            } catch (e) {
+              errors.push(`${relPath}: ${pluginJson.mcpServers} is not valid JSON — ${e.message}`);
+            }
+          }
+        } else if (typeof pluginJson.mcpServers === 'object' && !Array.isArray(pluginJson.mcpServers)) {
+          validateMcpServerEntries(pluginJson.mcpServers, `${relPath}/plugin.json`, errors);
+        } else {
+          errors.push(`${relPath}: mcpServers must be an object or a string path to a .mcp.json file`);
+        }
       }
     } catch (e) {
       errors.push(`${relPath}: plugin.json is not valid JSON — ${e.message}`);

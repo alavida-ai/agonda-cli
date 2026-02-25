@@ -7,7 +7,14 @@ import { listPlugins, getMarketplace, findPlugin } from '../src/lib/plugin.js';
 
 const TMP = join(tmpdir(), `agonda-plugin-test-${Date.now()}`);
 
+const FAKE_HOME = join(TMP, 'fakehome');
+let originalHome;
+
 before(() => {
+  originalHome = process.env.HOME;
+  process.env.HOME = FAKE_HOME;
+
+  mkdirSync(FAKE_HOME, { recursive: true });
   mkdirSync(join(TMP, '.git'), { recursive: true });
   mkdirSync(join(TMP, '.claude-plugin'), { recursive: true });
   mkdirSync(join(TMP, '.claude'), { recursive: true });
@@ -36,6 +43,7 @@ before(() => {
 });
 
 after(() => {
+  process.env.HOME = originalHome;
   rmSync(TMP, { recursive: true, force: true });
 });
 

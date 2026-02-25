@@ -39,6 +39,69 @@ before(() => {
   mkdirSync(join(crossWb, 'skills', 'ref-skill'), { recursive: true });
   writeFileSync(join(crossWb, 'workbench.json'), JSON.stringify({ primitives: {} }));
   writeFileSync(join(crossWb, 'skills', 'ref-skill', 'SKILL.md'), '---\nname: ref-skill\ndescription: References other workbench\n---\nSee ../other-workbench/skills/foo for details.');
+
+  // mcpServers — valid inline (command format)
+  const mcpCommandWb = join(TMP, 'mcp-command-wb');
+  mkdirSync(join(mcpCommandWb, '.claude-plugin'), { recursive: true });
+  writeFileSync(join(mcpCommandWb, 'workbench.json'), JSON.stringify({ primitives: {} }));
+  writeFileSync(join(mcpCommandWb, '.claude-plugin', 'plugin.json'), JSON.stringify({
+    name: 'mcp-command', description: 'Valid command MCP',
+    mcpServers: { context7: { command: 'npx', args: ['-y', '@upstash/context7-mcp@latest'] } },
+  }));
+
+  // mcpServers — valid inline (url format)
+  const mcpUrlWb = join(TMP, 'mcp-url-wb');
+  mkdirSync(join(mcpUrlWb, '.claude-plugin'), { recursive: true });
+  writeFileSync(join(mcpUrlWb, 'workbench.json'), JSON.stringify({ primitives: {} }));
+  writeFileSync(join(mcpUrlWb, '.claude-plugin', 'plugin.json'), JSON.stringify({
+    name: 'mcp-url', description: 'Valid URL MCP',
+    mcpServers: { linear: { url: 'https://mcp.linear.app/mcp' } },
+  }));
+
+  // mcpServers — valid string path to .mcp.json
+  const mcpFileWb = join(TMP, 'mcp-file-wb');
+  mkdirSync(join(mcpFileWb, '.claude-plugin'), { recursive: true });
+  writeFileSync(join(mcpFileWb, 'workbench.json'), JSON.stringify({ primitives: {} }));
+  writeFileSync(join(mcpFileWb, '.claude-plugin', 'plugin.json'), JSON.stringify({
+    name: 'mcp-file', description: 'File ref MCP', mcpServers: './.mcp.json',
+  }));
+  writeFileSync(join(mcpFileWb, '.claude-plugin', '.mcp.json'), JSON.stringify({
+    mcpServers: { linear: { url: 'https://mcp.linear.app/mcp' } },
+  }));
+
+  // mcpServers — string path to missing file
+  const mcpMissingWb = join(TMP, 'mcp-missing-wb');
+  mkdirSync(join(mcpMissingWb, '.claude-plugin'), { recursive: true });
+  writeFileSync(join(mcpMissingWb, 'workbench.json'), JSON.stringify({ primitives: {} }));
+  writeFileSync(join(mcpMissingWb, '.claude-plugin', 'plugin.json'), JSON.stringify({
+    name: 'mcp-missing', description: 'Missing file', mcpServers: './.mcp.json',
+  }));
+
+  // mcpServers — inline entry missing both command and url
+  const mcpInvalidEntryWb = join(TMP, 'mcp-invalid-entry-wb');
+  mkdirSync(join(mcpInvalidEntryWb, '.claude-plugin'), { recursive: true });
+  writeFileSync(join(mcpInvalidEntryWb, 'workbench.json'), JSON.stringify({ primitives: {} }));
+  writeFileSync(join(mcpInvalidEntryWb, '.claude-plugin', 'plugin.json'), JSON.stringify({
+    name: 'mcp-invalid-entry', description: 'Bad entry',
+    mcpServers: { broken: { type: 'http' } },
+  }));
+
+  // mcpServers — invalid type (array)
+  const mcpArrayWb = join(TMP, 'mcp-array-wb');
+  mkdirSync(join(mcpArrayWb, '.claude-plugin'), { recursive: true });
+  writeFileSync(join(mcpArrayWb, 'workbench.json'), JSON.stringify({ primitives: {} }));
+  writeFileSync(join(mcpArrayWb, '.claude-plugin', 'plugin.json'), JSON.stringify({
+    name: 'mcp-array', description: 'Array format', mcpServers: ['bad'],
+  }));
+
+  // mcpServers — .mcp.json with invalid content (missing mcpServers key)
+  const mcpBadFileWb = join(TMP, 'mcp-badfile-wb');
+  mkdirSync(join(mcpBadFileWb, '.claude-plugin'), { recursive: true });
+  writeFileSync(join(mcpBadFileWb, 'workbench.json'), JSON.stringify({ primitives: {} }));
+  writeFileSync(join(mcpBadFileWb, '.claude-plugin', 'plugin.json'), JSON.stringify({
+    name: 'mcp-badfile', description: 'Bad file content', mcpServers: './.mcp.json',
+  }));
+  writeFileSync(join(mcpBadFileWb, '.claude-plugin', '.mcp.json'), JSON.stringify({ servers: {} }));
 });
 
 after(() => {
@@ -80,5 +143,41 @@ describe('validateWorkbench', () => {
   it('detects cross-workbench path references', () => {
     const result = validateWorkbench(join(TMP, 'cross-wb'), TMP);
     assert.ok(result.warnings.some((w) => w.includes('cross-workbench path')));
+  });
+
+  // mcpServers validation (check 7)
+  it('accepts valid inline mcpServers with command format', () => {
+    const result = validateWorkbench(join(TMP, 'mcp-command-wb'), TMP);
+    assert.equal(result.errors.length, 0);
+  });
+
+  it('accepts valid inline mcpServers with url format', () => {
+    const result = validateWorkbench(join(TMP, 'mcp-url-wb'), TMP);
+    assert.equal(result.errors.length, 0);
+  });
+
+  it('accepts valid string path mcpServers with existing .mcp.json', () => {
+    const result = validateWorkbench(join(TMP, 'mcp-file-wb'), TMP);
+    assert.equal(result.errors.length, 0);
+  });
+
+  it('detects mcpServers string path to missing file', () => {
+    const result = validateWorkbench(join(TMP, 'mcp-missing-wb'), TMP);
+    assert.ok(result.errors.some((e) => e.includes('non-existent file')));
+  });
+
+  it('detects mcpServer entry missing command and url', () => {
+    const result = validateWorkbench(join(TMP, 'mcp-invalid-entry-wb'), TMP);
+    assert.ok(result.errors.some((e) => e.includes('must have either "command"+"args" (stdio) or "url" (HTTP)')));
+  });
+
+  it('detects mcpServers with invalid type (array)', () => {
+    const result = validateWorkbench(join(TMP, 'mcp-array-wb'), TMP);
+    assert.ok(result.errors.some((e) => e.includes('must be an object or a string path')));
+  });
+
+  it('detects .mcp.json file missing mcpServers key', () => {
+    const result = validateWorkbench(join(TMP, 'mcp-badfile-wb'), TMP);
+    assert.ok(result.errors.some((e) => e.includes('must contain an "mcpServers" object')));
   });
 });

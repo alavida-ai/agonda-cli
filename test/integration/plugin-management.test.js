@@ -10,11 +10,12 @@
 
 import { describe, it, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createTempRepo, addMarketplace, runCLI, runCLIJson } from './fixtures.js';
 
 let repo;
+let originalHome;
 
 const PLUGINS = [
   { name: 'governance-tools', source: './governance-tools', version: '1.0.0', description: 'Governance skills' },
@@ -42,6 +43,9 @@ function readSettings() {
 
 before(() => {
   repo = createTempRepo('plugin-mgmt');
+  originalHome = process.env.HOME;
+  process.env.HOME = join(repo.root, 'fakehome');
+  mkdirSync(process.env.HOME, { recursive: true });
   addMarketplace(repo.root, {
     name: 'test-mp',
     plugins: PLUGINS,
@@ -52,7 +56,10 @@ before(() => {
   });
 });
 
-after(() => repo.cleanup());
+after(() => {
+  process.env.HOME = originalHome;
+  repo.cleanup();
+});
 
 describe('US-3: plugin list', () => {
   before(() => resetSettings());
