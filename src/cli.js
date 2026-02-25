@@ -6,6 +6,7 @@ import { workspaceCommand } from './commands/workspace.js';
 import { pluginCommand } from './commands/plugin.js';
 import { primitivesCommand } from './commands/primitives.js';
 import { healthCommand } from './commands/health.js';
+import { publishCommand } from './commands/publish.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../package.json');
@@ -34,14 +35,7 @@ export function createProgram() {
 
   program.addCommand(healthCommand());
 
-  program
-    .command('publish')
-    .description('Publish a skill to the registry')
-    .addHelpText('after', `
-Examples:
-  agonda publish <skill-path>          Publish a skill via PR
-  agonda publish <path> --confirm      Skip interactive confirmation
-  agonda publish <path> --dry-run      Preview without publishing`);
+  program.addCommand(publishCommand());
 
   // Custom help: show examples-first format
   program.addHelpText('after', `
