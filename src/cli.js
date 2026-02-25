@@ -3,6 +3,7 @@ import { createRequire } from 'node:module';
 import { formatError, AgondaError, EXIT_CODES } from './utils/errors.js';
 import { output } from './utils/output.js';
 import { workspaceCommand } from './commands/workspace.js';
+import { pluginCommand } from './commands/plugin.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../package.json');
@@ -25,15 +26,7 @@ export function createProgram() {
   // Register subcommand groups
   program.addCommand(workspaceCommand());
 
-  program
-    .command('plugin')
-    .description('Validate and manage plugins')
-    .addHelpText('after', `
-Examples:
-  agonda plugin list                   Show all plugins and their status
-  agonda plugin validate               Validate current plugin structure
-  agonda plugin enable <name>          Enable a plugin
-  agonda plugin switch <name>          Switch to a single plugin`);
+  program.addCommand(pluginCommand());
 
   program
     .command('primitives')
