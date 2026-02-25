@@ -1,0 +1,29 @@
+{
+  "name": "@alavida/agonda",
+  "version": "0.1.0",
+  "description": "Agonda framework CLI — workspace discovery, primitive management, plugin management, health checks",
+  "type": "module",
+  "bin": {
+    "agonda": "./bin/agonda.js"
+  },
+  "scripts": {
+    "lint": "eslint src/",
+    "test": "node --test test/"
+  },
+  "keywords": [
+    "agonda",
+    "cli",
+    "alavida"
+  ],
+  "author": "Alavida AI",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^13.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
