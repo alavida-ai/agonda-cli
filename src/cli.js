@@ -2,6 +2,7 @@ import { Command } from 'commander';
 import { createRequire } from 'node:module';
 import { formatError, AgondaError, EXIT_CODES } from './utils/errors.js';
 import { output } from './utils/output.js';
+import { workspaceCommand } from './commands/workspace.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../package.json');
@@ -22,14 +23,7 @@ export function createProgram() {
     .option('--deep', 'Enable LLM-assisted analysis (uses tokens)');
 
   // Register subcommand groups
-  program
-    .command('workspace')
-    .description('Discover and manage workspaces')
-    .addHelpText('after', `
-Examples:
-  agonda workspace list                Show all active workspaces
-  agonda workspace current             Find workspace for current workbench
-  agonda workspace list --json         Machine-readable output`);
+  program.addCommand(workspaceCommand());
 
   program
     .command('plugin')
