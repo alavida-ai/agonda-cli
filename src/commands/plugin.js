@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { listPlugins } from '../lib/plugin.js';
+import { listPlugins, setPluginState, switchPlugin } from '../lib/plugin.js';
 import { validateAll } from '../lib/validate.js';
 import { output } from '../utils/output.js';
 import { EXIT_CODES } from '../utils/errors.js';
@@ -86,25 +86,95 @@ export function pluginCommand() {
   cmd
     .command('enable <name>')
     .description('Enable a plugin')
-    .action(() => {
-      output.error('Not implemented yet. See ALA-364.');
-      process.exit(1);
+    .option('--scope <scope>', 'Settings scope: project, local, or user', 'project')
+    .action((name, opts, command) => {
+      const globalOpts = command.optsWithGlobals();
+      const result = setPluginState(name, true, { scope: opts.scope });
+
+      if (globalOpts.json) {
+        output.json(result);
+        return;
+      }
+
+      if (result.alreadyInState) {
+        output.write(`${result.key} is already enabled (${result.scope} scope).`);
+      } else {
+        output.write(`Enabled ${result.key} in ${result.scope} scope.`);
+      }
+      output.status('Restart Claude Code for changes to take effect.');
     });
 
   cmd
     .command('disable <name>')
     .description('Disable a plugin')
-    .action(() => {
-      output.error('Not implemented yet. See ALA-364.');
-      process.exit(1);
+    .option('--scope <scope>', 'Settings scope: project, local, or user', 'project')
+    .action((name, opts, command) => {
+      const globalOpts = command.optsWithGlobals();
+      const result = setPluginState(name, false, { scope: opts.scope });
+
+      if (globalOpts.json) {
+        output.json(result);
+        return;
+      }
+
+      if (result.alreadyInState) {
+        output.write(`${result.key} is already disabled (${result.scope} scope).`);
+      } else {
+        output.write(`Disabled ${result.key} in ${result.scope} scope.`);
+      }
+      output.status('Restart Claude Code for changes to take effect.');
     });
 
   cmd
     .command('switch <name>')
-    .description('Switch to a single active plugin')
-    .action(() => {
-      output.error('Not implemented yet. See ALA-365.');
-      process.exit(1);
+    .description('Disable all plugins, enable target. Use --keep to preserve specific plugins.')
+    .option('--keep <names...>', 'Plugins to keep enabled during switch')
+    .option('--scope <scope>', 'Settings scope: project, local, or user', 'project')
+    .action((name, opts, command) => {
+      const globalOpts = command.optsWithGlobals();
+      const keep = opts.keep || [];
+
+      if (globalOpts.dryRun) {
+        // Dry run — show what would happen without writing
+        const plugins = listPlugins();
+        const keepSet = new Set(keep);
+
+        if (globalOpts.json) {
+          output.json({
+            dryRun: true,
+            wouldEnable: [name],
+            wouldDisable: plugins
+              .filter((p) => p.status === 'enabled' && p.name !== name && !keepSet.has(p.name))
+              .map((p) => p.name),
+            wouldKeep: keep,
+          });
+          return;
+        }
+
+        output.write('Dry run — no changes written:');
+        output.write(`  Enable: ${name}`);
+        for (const p of plugins) {
+          if (p.status === 'enabled' && p.name !== name && !keepSet.has(p.name)) {
+            output.write(`  Disable: ${p.name}`);
+          }
+        }
+        for (const k of keep) {
+          output.write(`  Keep: ${k}`);
+        }
+        return;
+      }
+
+      const result = switchPlugin(name, { keep, scope: opts.scope });
+
+      if (globalOpts.json) {
+        output.json(result);
+        return;
+      }
+
+      for (const d of result.disabled) output.write(`Disabled: ${d}`);
+      for (const e of result.enabled) output.write(`Enabled: ${e}`);
+      for (const k of result.kept) output.write(`Kept: ${k}`);
+      output.status('Restart Claude Code for changes to take effect.');
     });
 
   return cmd;

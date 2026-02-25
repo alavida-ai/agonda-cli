@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 import { findRepoRoot } from './context.js';
 import { NotFoundError } from '../utils/errors.js';
 
@@ -124,4 +124,131 @@ export function listPlugins(cwd = process.cwd()) {
 export function findPlugin(name, cwd = process.cwd()) {
   const marketplace = getMarketplace(cwd);
   return (marketplace.plugins || []).find((p) => p.name === name) || null;
+}
+
+/**
+ * Resolve the settings file path for a given scope.
+ */
+export function getSettingsPath(scope, cwd = process.cwd()) {
+  const repoRoot = findRepoRoot(cwd);
+  const homeDir = process.env.HOME || process.env.USERPROFILE || '';
+
+  switch (scope) {
+    case 'project': return join(repoRoot, '.claude', 'settings.json');
+    case 'local': return join(repoRoot, '.claude', 'settings.local.json');
+    case 'user': return join(homeDir, '.claude', 'settings.json');
+    default: return join(repoRoot, '.claude', 'settings.json');
+  }
+}
+
+/**
+ * Read a settings file, creating it if needed. Returns the parsed object.
+ */
+function readSettings(filePath) {
+  const existing = readJsonSafe(filePath);
+  return existing || {};
+}
+
+/**
+ * Write settings back to file, preserving all existing keys.
+ */
+function writeSettings(filePath, settings) {
+  const dir = dirname(filePath);
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(filePath, JSON.stringify(settings, null, 4) + '\n');
+}
+
+/**
+ * Set a plugin's enabled state in the specified scope.
+ * Returns { plugin, key, action, scope, file, alreadyInState }.
+ */
+export function setPluginState(name, enabled, { scope = 'project', cwd = process.cwd() } = {}) {
+  const plugin = findPlugin(name, cwd);
+  if (!plugin) {
+    throw new NotFoundError(
+      `Plugin "${name}" not found in marketplace.`,
+      { code: 'plugin_not_found', suggestion: 'Run "agonda plugin list" to see available plugins' }
+    );
+  }
+
+  const marketplaceName = getMarketplaceName(cwd);
+  const key = `${name}@${marketplaceName}`;
+  const filePath = getSettingsPath(scope, cwd);
+  const settings = readSettings(filePath);
+
+  if (!settings.enabledPlugins) settings.enabledPlugins = {};
+
+  const currentState = settings.enabledPlugins[key] === true;
+  const alreadyInState = currentState === enabled;
+
+  settings.enabledPlugins[key] = enabled;
+  writeSettings(filePath, settings);
+
+  return {
+    plugin: name,
+    key,
+    action: enabled ? 'enabled' : 'disabled',
+    scope,
+    file: filePath,
+    alreadyInState,
+  };
+}
+
+/**
+ * Switch to a single plugin — disable all others, enable the target.
+ * Optionally keep specific plugins enabled.
+ *
+ * Returns { enabled, disabled, kept }.
+ */
+export function switchPlugin(targetName, { keep = [], scope = 'project', cwd = process.cwd() } = {}) {
+  const plugin = findPlugin(targetName, cwd);
+  if (!plugin) {
+    throw new NotFoundError(
+      `Plugin "${targetName}" not found in marketplace.`,
+      { code: 'plugin_not_found', suggestion: 'Run "agonda plugin list" to see available plugins' }
+    );
+  }
+
+  // Validate --keep names exist
+  for (const k of keep) {
+    if (!findPlugin(k, cwd)) {
+      throw new NotFoundError(
+        `Keep plugin "${k}" not found in marketplace.`,
+        { code: 'plugin_not_found', suggestion: 'Run "agonda plugin list" to see available plugins' }
+      );
+    }
+  }
+
+  const marketplace = getMarketplace(cwd);
+  const marketplaceName = marketplace.name || 'unknown';
+  const filePath = getSettingsPath(scope, cwd);
+  const settings = readSettings(filePath);
+
+  if (!settings.enabledPlugins) settings.enabledPlugins = {};
+
+  const keepSet = new Set(keep);
+  const enabled = [];
+  const disabled = [];
+  const kept = [];
+
+  for (const p of marketplace.plugins) {
+    const key = `${p.name}@${marketplaceName}`;
+    const wasEnabled = settings.enabledPlugins[key] === true;
+
+    if (p.name === targetName) {
+      settings.enabledPlugins[key] = true;
+      enabled.push(p.name);
+    } else if (keepSet.has(p.name)) {
+      // Preserve current state, or enable if not yet
+      if (!wasEnabled) settings.enabledPlugins[key] = true;
+      kept.push(p.name);
+    } else if (wasEnabled) {
+      settings.enabledPlugins[key] = false;
+      disabled.push(p.name);
+    }
+  }
+
+  writeSettings(filePath, settings);
+
+  return { enabled, disabled, kept, scope, file: filePath };
 }
