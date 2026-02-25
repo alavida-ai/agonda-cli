@@ -189,4 +189,26 @@ describe('US-6: plugin enable', () => {
     const result = runCLI(['plugin', 'enable', 'nonexistent'], { cwd: repo.root });
     assert.notEqual(result.exitCode, 0);
   });
+
+  it('--dry-run previews enable without writing', () => {
+    const result = runCLI(['--dry-run', 'plugin', 'enable', 'website-tools'], { cwd: repo.root });
+    assert.equal(result.exitCode, 0);
+    assert.ok(result.stdout.includes('Dry run'));
+    assert.ok(result.stdout.includes('website-tools'));
+
+    // Settings should be unchanged
+    const settings = readSettings();
+    assert.equal(settings.enabledPlugins['website-tools@test-mp'], undefined);
+  });
+
+  it('--dry-run previews disable without writing', () => {
+    const result = runCLI(['--dry-run', 'plugin', 'disable', 'governance-tools'], { cwd: repo.root });
+    assert.equal(result.exitCode, 0);
+    assert.ok(result.stdout.includes('Dry run'));
+    assert.ok(result.stdout.includes('governance-tools'));
+
+    // Settings should be unchanged — governance-tools still enabled
+    const settings = readSettings();
+    assert.equal(settings.enabledPlugins['governance-tools@test-mp'], true);
+  });
 });

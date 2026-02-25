@@ -92,6 +92,17 @@ export function pluginCommand() {
     .option('--no-cache-clear', 'Skip clearing the plugin cache')
     .action((name, opts, command) => {
       const globalOpts = command.optsWithGlobals();
+
+      if (globalOpts.dryRun) {
+        if (globalOpts.json) {
+          output.json({ dryRun: true, wouldEnable: name, scope: opts.scope, wouldClearCache: opts.cacheClear !== false });
+          return;
+        }
+        output.write(`Dry run — would enable ${name} in ${opts.scope} scope.`);
+        if (opts.cacheClear !== false) output.write('  Would clear plugin cache');
+        return;
+      }
+
       const result = setPluginState(name, true, { scope: opts.scope });
 
       // Clear cache unless --no-cache-clear
@@ -123,6 +134,17 @@ export function pluginCommand() {
     .option('--no-cache-clear', 'Skip clearing the plugin cache')
     .action((name, opts, command) => {
       const globalOpts = command.optsWithGlobals();
+
+      if (globalOpts.dryRun) {
+        if (globalOpts.json) {
+          output.json({ dryRun: true, wouldDisable: name, scope: opts.scope, wouldClearCache: opts.cacheClear !== false });
+          return;
+        }
+        output.write(`Dry run — would disable ${name} in ${opts.scope} scope.`);
+        if (opts.cacheClear !== false) output.write('  Would clear plugin cache');
+        return;
+      }
+
       const result = setPluginState(name, false, { scope: opts.scope });
 
       // Clear cache unless --no-cache-clear
