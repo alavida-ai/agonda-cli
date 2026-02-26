@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { listPlugins } from '../lib/plugin.js';
+import { listWorkbenches } from '../lib/marketplace.js';
 import { runHealthChecks } from '../lib/health.js';
 import { checkWorkbenchPrimitives } from '../lib/primitives.js';
 import { findAllWorkbenches } from '../lib/context.js';
@@ -9,15 +9,13 @@ import { EXIT_CODES } from '../utils/errors.js';
 
 export function statusCommand() {
   const cmd = new Command('status')
-    .description('System-wide overview — plugins, domains, primitives, workspaces')
+    .description('System-wide overview — workbenches, domains, primitives, workspaces')
     .action((opts, command) => {
       const globalOpts = command.optsWithGlobals();
       let hasErrors = false;
 
-      // 1. Plugins
-      const plugins = listPlugins();
-      const enabledPlugins = plugins.filter((p) => p.status === 'enabled');
-      const disabledPlugins = plugins.filter((p) => p.status === 'disabled');
+      // 1. Workbenches
+      const workbenchList = listWorkbenches();
 
       // 2. Domains
       const health = runHealthChecks();
@@ -63,9 +61,9 @@ export function statusCommand() {
 
       if (globalOpts.json) {
         output.json({
-          plugins: {
-            enabled: enabledPlugins.map((p) => p.name),
-            disabled: disabledPlugins.map((p) => p.name),
+          workbenches: {
+            total: workbenchList.length,
+            names: workbenchList.map((w) => w.name),
           },
           domains: {
             results: health.results.map((r) => ({
@@ -91,7 +89,7 @@ export function statusCommand() {
       }
 
       // Human output
-      output.write(`Plugins: ${enabledPlugins.length} enabled, ${disabledPlugins.length} disabled (${enabledPlugins.map((p) => p.name).join(', ')})`);
+      output.write(`Workbenches: ${workbenchList.length} registered${workbenchList.length > 0 ? ` (${workbenchList.map((w) => w.name).join(', ')})` : ''}`);
 
       const healthyDomains = health.results.filter((r) => r.errors.length === 0);
       const unhealthyDomains = health.results.filter((r) => r.errors.length > 0);

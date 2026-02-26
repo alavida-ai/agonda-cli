@@ -44,18 +44,12 @@ export function addWorkspaces(root, workspaces) {
 /**
  * Add a marketplace.json and settings to a temp repo.
  */
-export function addMarketplace(root, { name, plugins, enabledPlugins = {} }) {
+export function addMarketplace(root, { name, plugins }) {
   mkdirSync(join(root, '.claude-plugin'), { recursive: true });
-  mkdirSync(join(root, '.claude'), { recursive: true });
 
   writeFileSync(
     join(root, '.claude-plugin', 'marketplace.json'),
     JSON.stringify({ name, plugins })
-  );
-
-  writeFileSync(
-    join(root, '.claude', 'settings.json'),
-    JSON.stringify({ enableAllProjectMcpServers: true, enabledPlugins })
   );
 }
 

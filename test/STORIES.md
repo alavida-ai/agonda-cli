@@ -41,72 +41,59 @@ Two-layer testing architecture for agonda-cli. User stories are acceptance crite
 
 ---
 
-### US-3: "I want to see which plugins are available and their status"
+### US-3: "I want to see which workbenches are registered in the marketplace"
 
-**Command:** `agonda plugin list`
+**Command:** `agonda marketplace list`
 
 | # | Agent Story | Lib Function | Unit Test |
 |---|-------------|-------------|-----------|
 | 1 | Find repo root | `context.findRepoRoot()` | `context.test.js` |
-| 2 | Read marketplace.json | `plugin.getMarketplace()` | `plugin.test.js` |
-| 3 | Read enabledPlugins from settings (3 scopes) | `plugin.getEnabledPluginsWithScope()` | `plugin.test.js` |
-| 4 | Cross-reference marketplace × settings | `plugin.listPlugins()` | `plugin.test.js` |
-| 5 | Format as table or JSON | `commands/plugin.js` action | integration |
+| 2 | Read marketplace.json | `marketplace.getMarketplace()` | `marketplace.test.js` |
+| 3 | Return workbench entries (no state) | `marketplace.listWorkbenches()` | `marketplace.test.js` |
+| 4 | Format as table or JSON | `commands/marketplace.js` action | integration |
 
-**Integration test:** `test/integration/plugin-management.test.js` — "list shows all plugins with status"
+**Integration test:** `test/integration/marketplace-list.test.js` — "list shows all workbenches"
 
 ---
 
-### US-4: "I want to validate my plugin before shipping"
+### US-4: "I want to validate my workbench before shipping"
 
-**Command:** `agonda plugin validate`
+**Command:** `agonda workbench validate`
 
 | # | Agent Story | Lib Function | Unit Test |
 |---|-------------|-------------|-----------|
 | 1 | Find repo root | `context.findRepoRoot()` | `context.test.js` |
 | 2 | Find workbench context (or all with --all) | `context.findWorkbenchContext()` / `context.findAllWorkbenches()` | `context.test.js` |
-| 3 | Check plugin.json required fields | `validate.validateWorkbench()` | `validate.test.js` |
-| 4 | Check for duplicate hook declarations | `validate.validateWorkbench()` | `validate.test.js` |
-| 5 | Check SKILL.md existence + frontmatter | `validate.validateWorkbench()` | `validate.test.js` |
-| 6 | Check hook script existence + rationale | `validate.validateWorkbench()` | `validate.test.js` |
-| 7 | Check cross-workbench path references | `validate.validateWorkbench()` | `validate.test.js` |
-| 8 | Report errors/warnings, exit 2 on errors | `commands/plugin.js` action | integration |
+| 3 | Delegate to `claude plugin validate` for base checks | `validate.delegateToClaude()` | `validate.test.js` |
+| 4 | Check SKILL.md existence + frontmatter | `validate.validateWorkbench()` | `validate.test.js` |
+| 5 | Check hook script existence + rationale | `validate.validateWorkbench()` | `validate.test.js` |
+| 6 | Check cross-workbench path references | `validate.validateWorkbench()` | `validate.test.js` |
+| 7 | Check .mcp.json file references | `validate.validateWorkbench()` | `validate.test.js` |
+| 8 | Report errors/warnings, exit 2 on errors | `commands/workbench.js` action | integration |
 
-**Integration test:** `test/integration/plugin-validation.test.js` — "validate detects errors and returns exit code 2"
+**Integration test:** `test/integration/workbench-validation.test.js` — "validate detects errors and returns exit code 2"
 
 ---
 
-### US-5: "I want to switch to working on the website"
+### US-7: "I want to validate the entire marketplace"
 
-**Command:** `agonda plugin switch website-tools --keep governance-tools`
+**Command:** `agonda marketplace validate`
 
 | # | Agent Story | Lib Function | Unit Test |
 |---|-------------|-------------|-----------|
 | 1 | Find repo root | `context.findRepoRoot()` | `context.test.js` |
-| 2 | Resolve target plugin from marketplace | `plugin.findPlugin()` | `plugin.test.js` |
-| 3 | Validate --keep plugins exist | `plugin.findPlugin()` | `plugin-manage.test.js` |
-| 4 | Read current enabledPlugins from settings | `plugin.getSettingsPath()` + readSettings | `plugin-manage.test.js` |
-| 5 | Disable all non-kept plugins | `plugin.switchPlugin()` | `plugin-manage.test.js` |
-| 6 | Enable target plugin | `plugin.switchPlugin()` | `plugin-manage.test.js` |
-| 7 | Write settings, warn about cache/restart | `commands/plugin.js` action | integration |
+| 2 | Read marketplace.json | `marketplace.getMarketplace()` | `marketplace.test.js` |
+| 3 | Resolve each plugin source path | `validate.validateMarketplace()` | `validate-marketplace.test.js` |
+| 4 | Run per-workbench validation on each | `validate.validateWorkbench()` | `validate-marketplace.test.js` |
+| 5 | Report cascade results | `commands/marketplace.js` action | integration |
 
-**Integration test:** `test/integration/plugin-management.test.js` — "switch disables others and enables target"
+**Integration test:** (inline in `validate-marketplace.test.js` for now)
 
 ---
 
-### US-6: "I want to enable governance-tools without affecting other plugins"
+### Removed Stories
 
-**Command:** `agonda plugin enable governance-tools`
-
-| # | Agent Story | Lib Function | Unit Test |
-|---|-------------|-------------|-----------|
-| 1 | Find repo root | `context.findRepoRoot()` | `context.test.js` |
-| 2 | Resolve plugin from marketplace | `plugin.findPlugin()` | `plugin.test.js` |
-| 3 | Read settings for target scope | `plugin.getSettingsPath()` + readSettings | `plugin-manage.test.js` |
-| 4 | Set enabled state, preserve other keys | `plugin.setPluginState()` | `plugin-manage.test.js` |
-| 5 | Write settings, warn about restart | `commands/plugin.js` action | integration |
-
-**Integration test:** `test/integration/plugin-management.test.js` — "enable sets state without affecting others"
+US-5 ("switch to website") and US-6 ("enable governance-tools") were removed. Plugin state management (enable/disable/switch) is now handled natively by `claude plugin enable/disable --scope project`.
 
 ## Running Tests
 

@@ -1,7 +1,7 @@
 {
   "name": "@alavida/agonda",
   "version": "0.1.0",
-  "description": "Agonda framework CLI — workspace discovery, primitive management, plugin management, health checks",
+  "description": "Agonda framework CLI — workspace discovery, workbench validation, marketplace listing, health checks",
   "type": "module",
   "bin": {
     "agonda": "./bin/agonda.js"

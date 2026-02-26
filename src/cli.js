@@ -3,7 +3,8 @@ import { createRequire } from 'node:module';
 import { formatError, AgondaError, EXIT_CODES } from './utils/errors.js';
 import { output } from './utils/output.js';
 import { workspaceCommand } from './commands/workspace.js';
-import { pluginCommand } from './commands/plugin.js';
+import { workbenchCommand } from './commands/workbench.js';
+import { marketplaceCommand } from './commands/marketplace.js';
 import { primitivesCommand } from './commands/primitives.js';
 import { healthCommand } from './commands/health.js';
 import { publishCommand } from './commands/publish.js';
@@ -17,7 +18,7 @@ export function createProgram() {
 
   program
     .name('agonda')
-    .description('Agonda framework CLI — workspace discovery, primitive management, plugin management, health checks')
+    .description('Agonda framework CLI — workspace discovery, workbench validation, marketplace listing, health checks')
     .version(pkg.version, '-V, --version', 'Show version number')
     .option('--json', 'Output as JSON (forced regardless of TTY)')
     .option('-q, --quiet', 'Suppress non-essential output')
@@ -30,7 +31,9 @@ export function createProgram() {
   // Register subcommand groups
   program.addCommand(workspaceCommand());
 
-  program.addCommand(pluginCommand());
+  program.addCommand(workbenchCommand());
+
+  program.addCommand(marketplaceCommand());
 
   program.addCommand(primitivesCommand());
 

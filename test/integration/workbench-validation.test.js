@@ -1,9 +1,7 @@
 /**
- * Integration tests for user story US-4.
+ * Integration tests for workbench validation.
  *
- * US-4: "I want to validate my plugin before shipping"
- *
- * These tests call the CLI binary and assert on stdout/exit codes.
+ * Tests the `agonda workbench validate` command via CLI binary.
  */
 
 import { describe, it, before, after } from 'node:test';
@@ -13,9 +11,9 @@ import { createTempRepo, addWorkbench, runCLI, runCLIJson } from './fixtures.js'
 let repo;
 
 before(() => {
-  repo = createTempRepo('plugin-validate');
+  repo = createTempRepo('workbench-validate');
 
-  // Good workbench — passes all checks
+  // Good workbench — passes all governance checks
   addWorkbench(repo.root, 'domains/governance/plugins/governance-tools', {
     pluginJson: { name: 'governance-tools', description: 'Governance skills and hooks' },
     skills: [
@@ -29,7 +27,7 @@ before(() => {
 
   // Bad workbench — multiple violations
   addWorkbench(repo.root, 'domains/dev/plugins/broken-tools', {
-    pluginJson: {}, // missing name
+    pluginJson: { name: 'broken-tools', description: 'Broken' },
     skills: [
       { name: 'orphan-skill' }, // no SKILL.md content
       {
@@ -45,11 +43,10 @@ before(() => {
 
 after(() => repo.cleanup());
 
-describe('US-4: plugin validate', () => {
+describe('workbench validate', () => {
   it('reports valid workbench with exit code 0', () => {
-    // Run from inside the good workbench
     const goodPath = 'domains/governance/plugins/governance-tools';
-    const result = runCLI(['plugin', 'validate'], {
+    const result = runCLI(['workbench', 'validate'], {
       cwd: `${repo.root}/${goodPath}`,
     });
     assert.equal(result.exitCode, 0);
@@ -58,24 +55,16 @@ describe('US-4: plugin validate', () => {
 
   it('reports errors for broken workbench with exit code 2', () => {
     const badPath = 'domains/dev/plugins/broken-tools';
-    const result = runCLI(['plugin', 'validate'], {
+    const result = runCLI(['workbench', 'validate'], {
       cwd: `${repo.root}/${badPath}`,
     });
     assert.equal(result.exitCode, 2);
     assert.ok(result.stdout.includes('ERROR'));
   });
 
-  it('detects missing plugin.json name', () => {
-    const badPath = 'domains/dev/plugins/broken-tools';
-    const result = runCLI(['plugin', 'validate'], {
-      cwd: `${repo.root}/${badPath}`,
-    });
-    assert.ok(result.stdout.includes('missing "name"'));
-  });
-
   it('detects missing SKILL.md', () => {
     const badPath = 'domains/dev/plugins/broken-tools';
-    const result = runCLI(['plugin', 'validate'], {
+    const result = runCLI(['workbench', 'validate'], {
       cwd: `${repo.root}/${badPath}`,
     });
     assert.ok(result.stdout.includes('missing SKILL.md'));
@@ -83,7 +72,7 @@ describe('US-4: plugin validate', () => {
 
   it('detects missing frontmatter', () => {
     const badPath = 'domains/dev/plugins/broken-tools';
-    const result = runCLI(['plugin', 'validate'], {
+    const result = runCLI(['workbench', 'validate'], {
       cwd: `${repo.root}/${badPath}`,
     });
     assert.ok(result.stdout.includes('missing frontmatter'));
@@ -91,7 +80,7 @@ describe('US-4: plugin validate', () => {
 
   it('detects non-existent hook scripts', () => {
     const badPath = 'domains/dev/plugins/broken-tools';
-    const result = runCLI(['plugin', 'validate'], {
+    const result = runCLI(['workbench', 'validate'], {
       cwd: `${repo.root}/${badPath}`,
     });
     assert.ok(result.stdout.includes('non-existent script'));
@@ -99,10 +88,9 @@ describe('US-4: plugin validate', () => {
 
   it('--json returns structured results with summary', () => {
     const badPath = 'domains/dev/plugins/broken-tools';
-    const result = runCLIJson(['plugin', 'validate'], {
+    const result = runCLIJson(['workbench', 'validate'], {
       cwd: `${repo.root}/${badPath}`,
     });
-    // Exit code 2 for validation errors, but stdout still has JSON
     assert.ok(result.json);
     assert.ok(result.json.summary);
     assert.ok(result.json.summary.errors > 0);
@@ -110,12 +98,10 @@ describe('US-4: plugin validate', () => {
   });
 
   it('--all validates all workbenches in repo', () => {
-    const result = runCLIJson(['--all', 'plugin', 'validate'], { cwd: repo.root });
-    // Should find both workbenches
+    const result = runCLIJson(['--all', 'workbench', 'validate'], { cwd: repo.root });
     assert.ok(result.json);
     assert.equal(result.json.results.length, 2);
 
-    // One should have errors, one should be clean
     const clean = result.json.results.find((r) => r.errors.length === 0);
     const broken = result.json.results.find((r) => r.errors.length > 0);
     assert.ok(clean, 'Expected one clean workbench');

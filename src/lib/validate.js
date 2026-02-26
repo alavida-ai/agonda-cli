@@ -1,30 +1,42 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { findRepoRoot, findWorkbenchContext, findAllWorkbenches } from './context.js';
+import { getMarketplace } from './marketplace.js';
 
 /**
- * Validate individual mcpServer entries.
- * Each entry must have either command+args (stdio) or url (HTTP).
+ * Check if `claude` CLI is available on PATH.
  */
-function validateMcpServerEntries(servers, contextPath, errors) {
-  for (const [name, config] of Object.entries(servers)) {
-    if (!config || typeof config !== 'object' || Array.isArray(config)) {
-      errors.push(`${contextPath}: mcpServer "${name}" must be an object`);
-      continue;
-    }
-    const hasCommand = 'command' in config;
-    const hasUrl = 'url' in config;
-    if (!hasCommand && !hasUrl) {
-      errors.push(`${contextPath}: mcpServer "${name}" must have either "command"+"args" (stdio) or "url" (HTTP)`);
-    }
-    if (hasCommand && hasUrl) {
-      errors.push(`${contextPath}: mcpServer "${name}" has both "command" and "url" — use one format, not both`);
-    }
+export function isClaudeAvailable() {
+  try {
+    execFileSync('claude', ['--version'], { stdio: 'pipe', timeout: 5000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Delegate base plugin validation to `claude plugin validate <path>`.
+ * Returns { passed: boolean, output: string }.
+ */
+export function delegateToClaude(pluginPath) {
+  try {
+    const result = execFileSync('claude', ['plugin', 'validate', pluginPath], {
+      stdio: 'pipe',
+      encoding: 'utf-8',
+      timeout: 15000,
+    });
+    return { passed: true, output: result };
+  } catch (err) {
+    return { passed: false, output: err.stdout || err.stderr || err.message };
   }
 }
 
 /**
  * Validate a single workbench/plugin directory.
+ * Step 0: delegate to Claude for base checks (plugin.json, mcpServers inline validation).
+ * Steps 1+: governance checks (skills, hooks, cross-refs, .mcp.json file refs).
  * Returns { path, errors[], warnings[] }.
  */
 export function validateWorkbench(wbPath, repoRoot) {
@@ -32,52 +44,44 @@ export function validateWorkbench(wbPath, repoRoot) {
   const warnings = [];
   const relPath = relative(repoRoot, wbPath);
 
-  // 1. Check plugin.json structure
+  // Step 0: Delegate to Claude for base plugin checks
+  if (isClaudeAvailable()) {
+    const claude = delegateToClaude(wbPath);
+    if (!claude.passed) {
+      errors.push(`${relPath}: claude plugin validate failed — ${claude.output.trim()}`);
+    }
+  } else {
+    warnings.push(`${relPath}: claude CLI not available — skipping base plugin validation`);
+  }
+
+  // .mcp.json file reference validation (string path in mcpServers — Claude rejects these)
   const pluginJsonPath = join(wbPath, '.claude-plugin', 'plugin.json');
   if (existsSync(pluginJsonPath)) {
     try {
       const pluginJson = JSON.parse(readFileSync(pluginJsonPath, 'utf-8'));
-      if (!pluginJson.name) errors.push(`${relPath}: plugin.json missing "name" field`);
-      if (!pluginJson.description) warnings.push(`${relPath}: plugin.json missing "description" field`);
 
-      // 2. Check for duplicate hook declarations
-      const hooksJsonPath = join(wbPath, 'hooks', 'hooks.json');
-      if (existsSync(hooksJsonPath) && pluginJson.hooks && pluginJson.hooks.length > 0) {
-        warnings.push(`${relPath}: hooks declared in both plugin.json and hooks/hooks.json — hooks.json takes precedence, plugin.json hooks may be duplicates`);
-      }
-
-      // 7. Validate mcpServers format
-      if (pluginJson.mcpServers !== undefined) {
+      if (typeof pluginJson.mcpServers === 'string') {
         const pluginDir = join(wbPath, '.claude-plugin');
-        if (typeof pluginJson.mcpServers === 'string') {
-          // String path — resolve relative to .claude-plugin dir and check file exists
-          const mcpPath = resolve(pluginDir, pluginJson.mcpServers);
-          if (!existsSync(mcpPath)) {
-            errors.push(`${relPath}: mcpServers references non-existent file: ${pluginJson.mcpServers}`);
-          } else {
-            try {
-              const mcpJson = JSON.parse(readFileSync(mcpPath, 'utf-8'));
-              if (!mcpJson.mcpServers || typeof mcpJson.mcpServers !== 'object' || Array.isArray(mcpJson.mcpServers)) {
-                errors.push(`${relPath}: ${pluginJson.mcpServers} must contain an "mcpServers" object`);
-              } else {
-                validateMcpServerEntries(mcpJson.mcpServers, `${relPath}/${pluginJson.mcpServers}`, errors);
-              }
-            } catch (e) {
-              errors.push(`${relPath}: ${pluginJson.mcpServers} is not valid JSON — ${e.message}`);
-            }
-          }
-        } else if (typeof pluginJson.mcpServers === 'object' && !Array.isArray(pluginJson.mcpServers)) {
-          validateMcpServerEntries(pluginJson.mcpServers, `${relPath}/plugin.json`, errors);
+        const mcpPath = resolve(pluginDir, pluginJson.mcpServers);
+        if (!existsSync(mcpPath)) {
+          errors.push(`${relPath}: mcpServers references non-existent file: ${pluginJson.mcpServers}`);
         } else {
-          errors.push(`${relPath}: mcpServers must be an object or a string path to a .mcp.json file`);
+          try {
+            const mcpJson = JSON.parse(readFileSync(mcpPath, 'utf-8'));
+            if (!mcpJson.mcpServers || typeof mcpJson.mcpServers !== 'object' || Array.isArray(mcpJson.mcpServers)) {
+              errors.push(`${relPath}: ${pluginJson.mcpServers} must contain an "mcpServers" object`);
+            }
+          } catch (e) {
+            errors.push(`${relPath}: ${pluginJson.mcpServers} is not valid JSON — ${e.message}`);
+          }
         }
       }
-    } catch (e) {
-      errors.push(`${relPath}: plugin.json is not valid JSON — ${e.message}`);
+    } catch {
+      // plugin.json parse errors are caught by Claude's base validation
     }
   }
 
-  // 3. Skill directory integrity
+  // Skill directory integrity
   const skillsDir = join(wbPath, 'skills');
   if (existsSync(skillsDir)) {
     let skillEntries;
@@ -111,14 +115,14 @@ export function validateWorkbench(wbPath, repoRoot) {
         }
       }
 
-      // 6. Cross-workbench path scan
+      // Cross-workbench path scan
       if (content.includes('../') && content.match(/\.\.\/[^)]*workbench/i)) {
         warnings.push(`${relPath}/skills/${entry.name}/SKILL.md: contains cross-workbench path reference (../...workbench)`);
       }
     }
   }
 
-  // 4. Hook script existence
+  // Hook script existence + rationale
   const hooksJsonPath = join(wbPath, 'hooks', 'hooks.json');
   if (existsSync(hooksJsonPath)) {
     try {
@@ -140,7 +144,7 @@ export function validateWorkbench(wbPath, repoRoot) {
             }
           }
 
-          // 5. Hook rationale check
+          // Hook rationale check
           if (!h.rationale) {
             warnings.push(`${relPath}: hook missing "rationale" field — ${h.command?.slice(0, 50)}`);
           }
@@ -175,4 +179,45 @@ export function validateAll({ all = false, cwd = process.cwd() } = {}) {
   }
 
   return workbenches.map((wbPath) => validateWorkbench(wbPath, repoRoot));
+}
+
+/**
+ * Cascade validate the marketplace:
+ * 1. Resolve each marketplace plugin source path
+ * 2. Run validateWorkbench() on each resolved source
+ * Returns { errors[], workbenches[] }.
+ */
+export function validateMarketplace({ cwd = process.cwd() } = {}) {
+  const repoRoot = findRepoRoot(cwd);
+  const marketplaceErrors = [];
+  const workbenchResults = [];
+
+  let marketplace;
+  try {
+    marketplace = getMarketplace(cwd);
+  } catch (err) {
+    return { errors: [err.message], workbenches: [] };
+  }
+
+  const plugins = marketplace.plugins || [];
+  if (plugins.length === 0) {
+    marketplaceErrors.push('marketplace.json has no plugins listed');
+  }
+
+  for (const plugin of plugins) {
+    if (!plugin.source) {
+      marketplaceErrors.push(`Plugin "${plugin.name || '(unnamed)'}": missing "source" field`);
+      continue;
+    }
+
+    const resolvedSource = resolve(repoRoot, plugin.source);
+    if (!existsSync(resolvedSource)) {
+      marketplaceErrors.push(`Plugin "${plugin.name}": source path does not exist: ${plugin.source}`);
+      continue;
+    }
+
+    workbenchResults.push(validateWorkbench(resolvedSource, repoRoot));
+  }
+
+  return { errors: marketplaceErrors, workbenches: workbenchResults };
 }

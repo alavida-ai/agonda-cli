@@ -161,7 +161,7 @@ export function resolveWorkbenchFlag(nameOrPath, cwd = process.cwd()) {
     `Workbench "${nameOrPath}" not found. Not a marketplace alias or valid path.`,
     {
       code: 'workbench_not_found',
-      suggestion: 'Run "agonda plugin list" to see available workbenches, or pass a path to a directory containing workbench.json',
+      suggestion: 'Run "agonda marketplace list" to see available workbenches, or pass a path to a directory containing workbench.json',
     }
   );
 }
