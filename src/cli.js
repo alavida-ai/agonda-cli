@@ -9,6 +9,7 @@ import { primitivesCommand } from './commands/primitives.js';
 import { healthCommand } from './commands/health.js';
 import { publishCommand } from './commands/publish.js';
 import { statusCommand } from './commands/status.js';
+import { quantumCommand } from './commands/quantum.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../package.json');
@@ -42,6 +43,8 @@ export function createProgram() {
   program.addCommand(publishCommand());
 
   program.addCommand(statusCommand());
+
+  program.addCommand(quantumCommand());
 
   // Custom help: show examples-first format
   program.addHelpText('after', `
