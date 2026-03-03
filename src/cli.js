@@ -10,6 +10,7 @@ import { healthCommand } from './commands/health.js';
 import { publishCommand } from './commands/publish.js';
 import { statusCommand } from './commands/status.js';
 import { quantumCommand } from './commands/quantum.js';
+import { upgradeCommand } from './commands/upgrade.js';
 
 const require = createRequire(import.meta.url);
 const pkg = require('../package.json');
@@ -45,6 +46,8 @@ export function createProgram() {
   program.addCommand(statusCommand());
 
   program.addCommand(quantumCommand());
+
+  program.addCommand(upgradeCommand());
 
   // Custom help: show examples-first format
   program.addHelpText('after', `

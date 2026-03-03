@@ -4,6 +4,7 @@ import { runHealthChecks } from '../lib/health.js';
 import { checkWorkbenchPrimitives } from '../lib/primitives.js';
 import { findAllWorkbenches } from '../lib/context.js';
 import { discoverWorkspaces, findUnmarkedWorkspaces } from '../lib/workspace.js';
+import { frameworkStatus } from '../lib/framework.js';
 import { output } from '../utils/output.js';
 import { EXIT_CODES } from '../utils/errors.js';
 
@@ -14,8 +15,21 @@ export function statusCommand() {
       const globalOpts = command.optsWithGlobals();
       let hasErrors = false;
 
+      // 0. Framework
+      let fwStatus;
+      try {
+        fwStatus = frameworkStatus();
+      } catch {
+        fwStatus = { installed: false, version: null, files: 0, drifted: 0, missing: 0, status: 'NOT_INSTALLED', lastHealthCheck: null };
+      }
+
       // 1. Workbenches
-      const workbenchList = listWorkbenches();
+      let workbenchList;
+      try {
+        workbenchList = listWorkbenches();
+      } catch {
+        workbenchList = [];
+      }
 
       // 2. Domains
       const health = runHealthChecks();
@@ -61,6 +75,13 @@ export function statusCommand() {
 
       if (globalOpts.json) {
         output.json({
+          framework: {
+            version: fwStatus.version,
+            files: fwStatus.files,
+            drifted: fwStatus.drifted,
+            missing: fwStatus.missing,
+            status: fwStatus.status,
+          },
           workbenches: {
             total: workbenchList.length,
             names: workbenchList.map((w) => w.name),
@@ -89,6 +110,14 @@ export function statusCommand() {
       }
 
       // Human output
+      if (fwStatus.installed) {
+        const driftInfo = fwStatus.drifted > 0 || fwStatus.missing > 0
+          ? ` (${fwStatus.drifted + fwStatus.missing} files drifted)`
+          : ' (CURRENT)';
+        output.write(`Framework: v${fwStatus.version}${driftInfo}`);
+      } else {
+        output.write('Framework: not installed');
+      }
       output.write(`Workbenches: ${workbenchList.length} registered${workbenchList.length > 0 ? ` (${workbenchList.map((w) => w.name).join(', ')})` : ''}`);
 
       const healthyDomains = health.results.filter((r) => r.errors.length === 0);

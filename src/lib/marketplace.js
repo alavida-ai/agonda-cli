@@ -45,6 +45,15 @@ export function getMarketplaceName(cwd = process.cwd()) {
  * Returns array of { name, version, description, source, category, tags }.
  * No enabled/disabled state — that's Claude's domain now.
  */
+/**
+ * Derive workbench type (creator/consumer/operator) from source path.
+ * Path pattern: ./domains/{domain}/workbenches/{type}/{name}
+ */
+function deriveType(source) {
+  const match = source.match(/\/workbenches\/([^/]+)\//);
+  return match ? match[1] : 'unknown';
+}
+
 export function listWorkbenches(cwd = process.cwd()) {
   const marketplace = getMarketplace(cwd);
 
@@ -53,6 +62,7 @@ export function listWorkbenches(cwd = process.cwd()) {
     version: plugin.version || '0.0.0',
     description: plugin.description || '',
     source: plugin.source || '',
+    type: deriveType(plugin.source || ''),
     category: plugin.category || '',
     tags: plugin.tags || [],
   }));

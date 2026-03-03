@@ -20,6 +20,7 @@ export function marketplaceCommand() {
           name: w.name,
           version: w.version,
           description: w.description,
+          type: w.type,
           source: w.source,
         })));
         return;
@@ -31,8 +32,8 @@ export function marketplaceCommand() {
       }
 
       output.table(
-        ['Name', 'Source', 'Version'],
-        workbenches.map((w) => [w.name, w.source, w.version])
+        ['Name', 'Description', 'Type'],
+        workbenches.map((w) => [w.name, w.description, w.type])
       );
     });
 
